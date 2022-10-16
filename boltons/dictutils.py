@@ -60,50 +60,43 @@ The OMD has been performance tuned to be suitable for a wide range of
 usages, including as a basic unordered MultiDict. Special
 thanks to `Mark Williams`_ for all his help.
 
-[1] As of 2015, `basic dicts on PyPy are ordered
-<http://morepypy.blogspot.com/2015/01/faster-more-memory-efficient-and-more.html>`_,
-and as of December 2017, `basic dicts in CPython 3 are now ordered
-<https://mail.python.org/pipermail/python-dev/2017-December/151283.html>`_, as
-well.
-_Mark Williams: https://github.com/markrwilliams
+.. [1] As of 2015, `basic dicts on PyPy are ordered
+   <http://morepypy.blogspot.com/2015/01/faster-more-memory-efficient-and-more.html>`_,
+   and as of December 2017, `basic dicts in CPython 3 are now ordered
+   <https://mail.python.org/pipermail/python-dev/2017-December/151283.html>`_, as
+   well.
+.. _Mark Williams: https://github.com/markrwilliams
+
 """
 
 try:
-    from collections.abc import ItemsView, KeysView, ValuesView
+    from collections.abc import KeysView, ValuesView, ItemsView
 except ImportError:
-    from collections import ItemsView, KeysView, ValuesView
+    from collections import KeysView, ValuesView, ItemsView
+
+import itertools
 
 try:
-    from itertools import zip_longest
+    from itertools import izip_longest
 except ImportError:
-    from itertools import zip_longest as zip_longest
+    from itertools import zip_longest as izip_longest
 
 try:
     from typeutils import make_sentinel
-except ImportError:
-    from typeutils import make_sentinel
-
-try:
-    _MISSING = make_sentinel(var_name="_MISSING")
+    _MISSING = make_sentinel(var_name='_MISSING')
 except ImportError:
     _MISSING = object()
 
+
 PREV, NEXT, KEY, VALUE, SPREV, SNEXT = range(6)
 
-__all__ = [
-    "MultiDict",
-    "OMD",
-    "OrderedMultiDict",
-    "OneToOne",
-    "ManyToMany",
-    "subdict",
-    "FrozenDict",
-]
+
+__all__ = ['MultiDict', 'OMD', 'OrderedMultiDict', 'OneToOne', 'ManyToMany', 'subdict', 'FrozenDict']
 
 try:
-    profile = any
-except TypeError:
-    profile = bool
+    profile
+except NameError:
+    profile = lambda x: x
 
 
 class OrderedMultiDict(dict):
@@ -166,7 +159,7 @@ class OrderedMultiDict(dict):
     >>> OrderedMultiDict([('a', 1), ('b', 2), ('a', 3)]).items(multi=False)
     [('a', 3), ('b', 2)]
 
-     warning::
+    .. warning::
 
        ``dict(omd)`` changed behavior `in Python 3.7
        <https://bugs.python.org/issue34320>`_ due to changes made to
@@ -180,13 +173,10 @@ class OrderedMultiDict(dict):
        behavior, just use :meth:`~OrderedMultiDict.todict()`.
 
     """
-
     def __init__(self, *args, **kwargs):
         if len(args) > 1:
-            raise TypeError(
-                "%s expected at most 1 argument, got %s"
-                % (self.__class__.__name__, len(args))
-            )
+            raise TypeError('%s expected at most 1 argument, got %s'
+                            % (self.__class__.__name__, len(args)))
         super(OrderedMultiDict, self).__init__()
 
         self._clear_ll()
@@ -263,7 +253,7 @@ class OrderedMultiDict(dict):
             return default
 
     def clear(self):
-        """Empty the dictionary."""
+        "Empty the dictionary."
         super(OrderedMultiDict, self).clear()
         self._clear_ll()
 
@@ -278,7 +268,7 @@ class OrderedMultiDict(dict):
         return self[k]
 
     def copy(self):
-        """Return a shallow copy of the dictionary."""
+        "Return a shallow copy of the dictionary."
         return self.__class__(self.iteritems(multi=True))
 
     @classmethod
@@ -288,50 +278,50 @@ class OrderedMultiDict(dict):
         """
         return cls([(k, default) for k in keys])
 
-    def update(self, e, **f):
+    def update(self, E, **F):
         """Add items from a dictionary or iterable (and/or keyword arguments),
         overwriting values under an existing key. See
         :meth:`dict.update` for more details.
         """
         # E and F are throwback names to the dict() __doc__
-        if e is self:
+        if E is self:
             return
         self_add = self.add
-        if isinstance(e, OrderedMultiDict):
-            for k in e:
+        if isinstance(E, OrderedMultiDict):
+            for k in E:
                 if k in self:
                     del self[k]
-            for k, v in e.iteritems(multi=True):
+            for k, v in E.iteritems(multi=True):
                 self_add(k, v)
-        elif callable(getattr(e, "keys", None)):
-            for k in e.keys():
-                self[k] = e[k]
+        elif callable(getattr(E, 'keys', None)):
+            for k in E.keys():
+                self[k] = E[k]
         else:
             seen = set()
             seen_add = seen.add
-            for k, v in e:
+            for k, v in E:
                 if k not in seen and k in self:
                     del self[k]
                     seen_add(k)
                 self_add(k, v)
-        for k in f:
-            self[k] = f[k]
+        for k in F:
+            self[k] = F[k]
         return
 
-    def update_extend(self, e):
+    def update_extend(self, E, **F):
         """Add items from a dictionary, iterable, and/or keyword
         arguments without overwriting existing items present in the
         dictionary. Like :meth:`update`, but adds to existing keys
         instead of overwriting them.
         """
-        if e is self:
-            iterator = iter(e.items())
-        elif isinstance(e, OrderedMultiDict):
-            iterator = e.iteritems(multi=True)
-        elif hasattr(e, "keys"):
-            iterator = ((k, e[k]) for k in e.keys())
+        if E is self:
+            iterator = iter(E.items())
+        elif isinstance(E, OrderedMultiDict):
+            iterator = E.iteritems(multi=True)
+        elif hasattr(E, 'keys'):
+            iterator = ((k, E[k]) for k in E.keys())
         else:
-            iterator = e
+            iterator = E
 
         self_add = self.add
         for k, v in iterator:
@@ -361,18 +351,16 @@ class OrderedMultiDict(dict):
         if isinstance(other, OrderedMultiDict):
             selfi = self.iteritems(multi=True)
             otheri = other.iteritems(multi=True)
-            zipped_items = zip_longest(selfi, otheri, fillvalue=(None, None))
+            zipped_items = izip_longest(selfi, otheri, fillvalue=(None, None))
             for (selfk, selfv), (otherk, otherv) in zipped_items:
                 if selfk != otherk or selfv != otherv:
                     return False
-            if not (
-                next(selfi, _MISSING) is _MISSING and
-                next(otheri, _MISSING) is _MISSING
-            ):
+            if not(next(selfi, _MISSING) is _MISSING
+                   and next(otheri, _MISSING) is _MISSING):
                 # leftovers  (TODO: watch for StopIteration?)
                 return False
             return True
-        elif hasattr(other, "keys"):
+        elif hasattr(other, 'keys'):
             for selfk in self:
                 try:
                     other[selfk] == self[selfk]
@@ -420,7 +408,7 @@ class OrderedMultiDict(dict):
                 k = self.root[PREV][KEY]
             else:
                 if default is _MISSING:
-                    raise KeyError("empty %r" % type(self))
+                    raise KeyError('empty %r' % type(self))
                 return default
         try:
             self._remove(k)
@@ -491,7 +479,7 @@ class OrderedMultiDict(dict):
         *multi* to ``True`` to get all values according to insertion
         order.
         """
-        for k, v in self.iteritems(multi):
+        for k, v in self.iteritems(multi=multi):
             yield v
 
     def todict(self, multi=False):
@@ -527,11 +515,10 @@ class OrderedMultiDict(dict):
 
         >>> omd = OrderedMultiDict(zip('hello', 'world'))
         >>> omd.sorted(key=lambda i: i[1])  # i[0] is the key, i[1] is the val
-        OrderedMultiDict([('o', 'd'), ('l', 'l'), ('e', 'o'), ('l', 'r'), ('h', 'w')]) # noqa
+        OrderedMultiDict([('o', 'd'), ('l', 'l'), ('e', 'o'), ('l', 'r'), ('h', 'w')])
         """
         cls = self.__class__
-        return cls(sorted(self.iteritems(multi=True),
-                          key=key, reverse=reverse))
+        return cls(sorted(self.iteritems(multi=True), key=key, reverse=reverse))
 
     def sortedvalues(self, key=None, reverse=False):
         """Returns a copy of the :class:`OrderedMultiDict` with the same keys
@@ -558,7 +545,7 @@ class OrderedMultiDict(dict):
         >>> omd == somd
         False
         >>> somd
-        OrderedMultiDict([('even', 2), ('even', 4), ('odd', 1), ('odd', 3), ('even', 6), ('odd', 5)]) # noqa
+        OrderedMultiDict([('even', 2), ('even', 4), ('odd', 1), ('odd', 3), ('even', 6), ('odd', 5)])
 
         As demonstrated above, contents and key order are
         retained. Only value order changes.
@@ -568,12 +555,8 @@ class OrderedMultiDict(dict):
         except AttributeError:
             superself_iteritems = super(OrderedMultiDict, self).items()
         # (not reverse) because they pop off in reverse order for reinsertion
-        sorted_val_map = dict(
-            [
-                (k, sorted(v, key=key, reverse=(not reverse)))
-                for k, v in superself_iteritems
-            ]
-        )
+        sorted_val_map = dict([(k, sorted(v, key=key, reverse=(not reverse)))
+                               for k, v in superself_iteritems])
         ret = self.__class__()
         for k in self.iterkeys(multi=True):
             ret.add(k, sorted_val_map[k].pop())
@@ -643,22 +626,19 @@ class OrderedMultiDict(dict):
 
     def __repr__(self):
         cn = self.__class__.__name__
-        kvs = ", ".join([repr((k, v)) for k, v in self.iteritems(multi=True)])
-        return "%s([%s])" % (cn, kvs)
+        kvs = ', '.join([repr((k, v)) for k, v in self.iteritems(multi=True)])
+        return '%s([%s])' % (cn, kvs)
 
     def viewkeys(self):
-        """OMD.viewkeys() -> a set-like object providing a view on
-        OMD's keys"""
+        "OMD.viewkeys() -> a set-like object providing a view on OMD's keys"
         return KeysView(self)
 
     def viewvalues(self):
-        """OMD.viewvalues() -> an object providing a view on
-        OMD's values"""
+        "OMD.viewvalues() -> an object providing a view on OMD's values"
         return ValuesView(self)
 
     def viewitems(self):
-        """OMD.viewitems() -> a set-like object providing a view on
-        OMD's items"""
+        "OMD.viewitems() -> a set-like object providing a view on OMD's items"
         return ItemsView(self)
 
 
@@ -672,7 +652,6 @@ class FastIterOrderedMultiDict(OrderedMultiDict):
     is faster and uses constant memory but adding duplicate key-value
     pairs is slower. Brainchild of Mark Williams.
     """
-
     def _clear_ll(self):
         # TODO: always reset objects? (i.e., no else block below)
         try:
@@ -681,7 +660,9 @@ class FastIterOrderedMultiDict(OrderedMultiDict):
             _map = self._map = {}
             self.root = []
         _map.clear()
-        self.root[:] = [self.root, self.root, None, None, self.root, self.root]
+        self.root[:] = [self.root, self.root,
+                        None, None,
+                        self.root, self.root]
 
     def _insert(self, k, v):
         root = self.root
@@ -690,7 +671,9 @@ class FastIterOrderedMultiDict(OrderedMultiDict):
         last = root[PREV]
 
         if cells is empty:
-            cell = [last, root, k, v, last, root]
+            cell = [last, root,
+                    k, v,
+                    last, root]
             # was the last one skipped?
             if last[SPREV][SNEXT] is root:
                 last[SPREV][SNEXT] = cell
@@ -700,7 +683,9 @@ class FastIterOrderedMultiDict(OrderedMultiDict):
             # if the previous was skipped, go back to the cell that
             # skipped it
             sprev = last[SPREV] if (last[SPREV][SNEXT] is not last) else last
-            cell = [last, root, k, v, sprev, root]
+            cell = [last, root,
+                    k, v,
+                    sprev, root]
             # skip me
             last[SNEXT] = root
             last[NEXT] = root[PREV] = root[SPREV] = cell
@@ -727,15 +712,10 @@ class FastIterOrderedMultiDict(OrderedMultiDict):
             if cell[PREV][SPREV][SNEXT] is cell:
                 cell[PREV][SPREV][SNEXT] = cell[NEXT]
             elif cell[SNEXT] is cell[NEXT]:
-                cell[SPREV][SNEXT], cell[SNEXT][SPREV] = (
-                    cell[SNEXT],
-                    cell[SPREV],
-                )
-                cell[PREV][NEXT], cell[NEXT][PREV] = (
-                    cell[NEXT],
-                    cell[PREV],
-                )
-                cell[PREV][SNEXT] = cell[SNEXT]
+                cell[SPREV][SNEXT], cell[SNEXT][SPREV] = cell[SNEXT], cell[SPREV]
+
+            cell[PREV][NEXT], cell[NEXT][PREV] = cell[NEXT], cell[PREV]
+        cell[PREV][SNEXT] = cell[SNEXT]
 
     def iteritems(self, multi=False):
         next_link = NEXT if multi else SNEXT
@@ -797,8 +777,7 @@ class OneToOne(dict):
     For a very similar project, with even more one-to-one
     functionality, check out `bidict <https://github.com/jab/bidict>`_.
     """
-
-    __slots__ = ("inv",)
+    __slots__ = ('inv',)
 
     def __init__(self, *a, **kw):
         raise_on_dupe = False
@@ -828,15 +807,11 @@ class OneToOne(dict):
         for k, v in self.items():
             val_multidict.setdefault(v, []).append(k)
 
-        dupes = dict(
-            [(v, k_list) for v, k_list in val_multidict.items()
-             if len(k_list) > 1]
-        )
+        dupes = dict([(v, k_list) for v, k_list in
+                      val_multidict.items() if len(k_list) > 1])
 
-        raise ValueError(
-            "expected unique values, got multiple keys for"
-            " the following values: %r" % dupes
-        )
+        raise ValueError('expected unique values, got multiple keys for'
+                         ' the following values: %r' % dupes)
 
     @classmethod
     def unique(cls, *a, **kw):
@@ -845,18 +820,16 @@ class OneToOne(dict):
 
         >>> OneToOne.unique({'a': 1, 'b': 1})
         Traceback (most recent call last):
-
-        ValueError: expected unique values, got multiple keys
-        for the following values:
+        ...
+        ValueError: expected unique values, got multiple keys for the following values: ...
 
         This even works across inputs:
 
         >>> a_dict = {'a': 2}
         >>> OneToOne.unique(a_dict, b=2)
         Traceback (most recent call last):
-
-        ValueError: expected unique values, got multiple keys
-        for the following values:
+        ...
+        ValueError: expected unique values, got multiple keys for the following values: ...
         """
         return cls(_OTO_UNIQUE_MARKER, *a, **kw)
 
@@ -899,7 +872,6 @@ class OneToOne(dict):
         return self[key]
 
     def update(self, dict_or_iterable, **kw):
-        keys_vals = None
         if isinstance(dict_or_iterable, dict):
             for val in dict_or_iterable.values():
                 hash(val)
@@ -920,12 +892,8 @@ class OneToOne(dict):
         dict_repr = dict.__repr__(self)
         return "%s(%s)" % (cn, dict_repr)
 
-    """
-    marker for the secret handshake used internally to
-    set up the invert ManyToMany
-    """
 
-
+# marker for the secret handshake used internally to set up the invert ManyToMany
 _PAIRING = object()
 
 
@@ -939,7 +907,6 @@ class ManyToMany(object):
 
     also, can be used as a directed graph among hashable python objects
     """
-
     def __init__(self, items=None):
         self.data = {}
         if type(items) is tuple and items and items[0] is _PAIRING:
@@ -989,7 +956,7 @@ class ManyToMany(object):
                     self.inv.data[k] = other.inv.data[k]
                 else:
                     self.inv.data[k].update(other.inv.data[k])
-        elif callable(getattr(iterable, "keys", None)):
+        elif callable(getattr(iterable, 'keys', None)):
             for k in iterable.keys():
                 self.add(k, iterable[k])
         else:
@@ -1047,7 +1014,7 @@ class ManyToMany(object):
 
     def __repr__(self):
         cn = self.__class__.__name__
-        return "%s(%r)" % (cn, list(self.iteritems()))
+        return '%s(%r)' % (cn, list(self.iteritems()))
 
 
 def subdict(d, keep=None, drop=None):
@@ -1086,22 +1053,20 @@ class FrozenHashError(TypeError):
     pass
 
 
-class FrozenDict:
+class FrozenDict(dict):
     """An immutable dict subtype that is hashable and can itself be used
     as a :class:`dict` key or :class:`set` entry. What
     :class:`frozenset` is to :class:`set`, FrozenDict is to
     :class:`dict`.
 
     There was once an attempt to introduce such a type to the standard
-    library, but it was rejected:
-    `PEP 416 <https://www.python.org/dev/peps/pep-0416/>`.
+    library, but it was rejected: `PEP 416 <https://www.python.org/dev/peps/pep-0416/>`_.
 
     Because FrozenDict is a :class:`dict` subtype, it automatically
     works everywhere a dict would, including JSON serialization.
 
     """
-
-    __slots__ = ("_hash",)
+    __slots__ = ('_hash',)
 
     def updated(self, *a, **kw):
         """Make a copy and add items from a dictionary or iterable (and/or
@@ -1110,7 +1075,7 @@ class FrozenDict:
         """
         data = dict(self)
         data.update(*a, **kw)
-        return type(self)
+        return type(self)(data)
 
     @classmethod
     def fromkeys(cls, keys, value=None):
@@ -1119,7 +1084,7 @@ class FrozenDict:
 
     def __repr__(self):
         cn = self.__class__.__name__
-        return "%s(%s)" % (cn, dict.__repr__(self))
+        return '%s(%s)' % (cn, dict.__repr__(self))
 
     def __reduce_ex__(self, protocol):
         return type(self), (dict(self),)
@@ -1143,8 +1108,8 @@ class FrozenDict:
 
     # block everything else
     def _raise_frozen_typeerror(self, *a, **kw):
-        """raises a TypeError, because FrozenDicts are immutable"""
-        raise TypeError("%s object is immutable" % self.__class__.__name__)
+        "raises a TypeError, because FrozenDicts are immutable"
+        raise TypeError('%s object is immutable' % self.__class__.__name__)
 
     __ior__ = __setitem__ = __delitem__ = update = _raise_frozen_typeerror
     setdefault = pop = popitem = clear = _raise_frozen_typeerror
